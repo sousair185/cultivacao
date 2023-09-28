@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { format, differenceInDays, parse } from "date-fns";
 import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import {
   getFirestore,
   collection,
@@ -32,16 +33,18 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-initializeApp(firebaseConfig);
+getAuth(initializeApp(firebaseConfig));
 
-const db = getFirestore();
 const notify = (msg) => toast(msg);
+const db = getFirestore();
 
-const NewLoan = ({ addLoan }) => {
+const NewLoan = ({ addLoan, onLoadingChange }) => {
   const { register, handleSubmit, reset } = useForm();
   const storage = getStorage();
 
   const [whatsappPhone, setWhatsappPhone] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
   const normalizePhoneNumber = (input) => {
     let normalizedNumber = input.replace(/\D/g, "");
     if (!normalizedNumber.startsWith("55")) {
@@ -55,6 +58,8 @@ const NewLoan = ({ addLoan }) => {
   };
 
   const onSubmit = async (data) => {
+    setIsLoading(true);
+    onLoadingChange(true);
     const loan = {
       ...data,
       loanDate: format(new Date(), "dd/MM/yyyy"),
@@ -76,6 +81,8 @@ const NewLoan = ({ addLoan }) => {
     } catch (e) {
       notify("Opa! Não foi possível cadastrar, tente corrigir as informações");
     }
+    setIsLoading(false);
+    onLoadingChange(false);
   };
 
   return (
@@ -113,6 +120,7 @@ const NewLoan = ({ addLoan }) => {
 const EquipmentLoan = () => {
   const [loans, setLoans] = useState([]);
   const [search, setSearch] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const fetchLoans = async () => {
     const querySnapshot = await getDocs(collection(db, "loans"));
@@ -178,64 +186,73 @@ const EquipmentLoan = () => {
 
   return (
     <div>
-      <ToastContainer />
-      <div className="titulo">
-        <h1>Grupo Cultivação</h1>
-        <p>Paróquia Santa Luzia - Limeira/SP</p>
+      <div>
+        <ToastContainer />
+        <div className="titulo">
+          <h1>Grupo Cultivação</h1>
+          <p>Paróquia Santa Luzia - Limeira/SP</p>
+        </div>
+        <NewLoan addLoan={addLoan} onLoadingChange={setIsLoading} />
+        {isLoading && (
+          <div className="pop-up">
+            <div className="spinner"></div>
+          </div>
+        )}
+        <input
+          className="pesquisa"
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Pesquisar..."
+        />
+        {loans &&
+          loans
+            .filter(
+              (loan) =>
+                loan.status !== "devolvido" &&
+                JSON.stringify(loan)
+                  .toLowerCase()
+                  .includes(search.toLowerCase())
+            )
+            .map((loan, index) => (
+              <div key={index} className="produtos">
+                <h2>Empréstimo {index + 1}</h2>
+                <p>Nº de Identificação: {loan.id}</p>
+                <p>Descrição do Item: {loan.itemDescription}</p>
+                <p>Valor Aproximado R$: {loan.approximateValue}</p>
+                <p>
+                  Foto do Produto:{" "}
+                  <img src={loan.productPhoto} alt="Foto do Produto" />
+                </p>
+                <p>Solicitante: {loan.requester}</p>
+                <p>Endereço do Solicitante: {loan.requesterAddress}</p>
+                <p>
+                  Telefone WhatsApp:
+                  <button onClick={() => openWhatsApp(loan.whatsappPhone)}>
+                    {loan.whatsappPhone}
+                  </button>
+                </p>
+                <p>Quem Emprestou: {loan.lender}</p>
+                <p>
+                  Status:
+                  <select
+                    value={loan.status}
+                    onChange={(e) => {
+                      updateLoanStatus(loan.id, e.target.value);
+                    }}
+                  >
+                    <option value="emprestado">Emprestado</option>
+                    <option value="pendente de renovação">
+                      Pendente de Renovação
+                    </option>
+                    <option value="renovado">Renovado</option>
+                    <option value="devolvido">Devolvido</option>
+                  </select>
+                </p>
+                <p>Data do Empréstimo: {loan.loanDate}</p>
+              </div>
+            ))}
       </div>
-      <NewLoan addLoan={addLoan} />
-      <input
-        className="pesquisa"
-        type="text"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Pesquisar..."
-      />
-      {loans &&
-        loans
-          .filter(
-            (loan) =>
-              loan.status !== "devolvido" &&
-              JSON.stringify(loan).toLowerCase().includes(search.toLowerCase())
-          )
-          .map((loan, index) => (
-            <div key={index} className="produtos">
-              <h2>Empréstimo {index + 1}</h2>
-              <p>Nº de Identificação: {loan.id}</p>
-              <p>Descrição do Item: {loan.itemDescription}</p>
-              <p>Valor Aproximado R$: {loan.approximateValue}</p>
-              <p>
-                Foto do Produto:{" "}
-                <img src={loan.productPhoto} alt="Foto do Produto" />
-              </p>
-              <p>Solicitante: {loan.requester}</p>
-              <p>Endereço do Solicitante: {loan.requesterAddress}</p>
-              <p>
-                Telefone WhatsApp:
-                <button onClick={() => openWhatsApp(loan.whatsappPhone)}>
-                  {loan.whatsappPhone}
-                </button>
-              </p>
-              <p>Quem Emprestou: {loan.lender}</p>
-              <p>
-                Status:
-                <select
-                  value={loan.status}
-                  onChange={(e) => {
-                    updateLoanStatus(loan.id, e.target.value);
-                  }}
-                >
-                  <option value="emprestado">Emprestado</option>
-                  <option value="pendente de renovação">
-                    Pendente de Renovação
-                  </option>
-                  <option value="renovado">Renovado</option>
-                  <option value="devolvido">Devolvido</option>
-                </select>
-              </p>
-              <p>Data do Empréstimo: {loan.loanDate}</p>
-            </div>
-          ))}
     </div>
   );
 };
